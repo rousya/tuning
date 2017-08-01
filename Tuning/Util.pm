@@ -58,6 +58,7 @@ sub cd {
 	my ($path) = @_;
 	my $pwd = `pwd`; chomp $pwd;
 
+	chdir $path;
 	my $msg = sprintf("Change dir from %s to %s", $pwd, $path);
 	syslog $msg;
 }

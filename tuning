@@ -1,0 +1,121 @@
+#!/usr/bin/perl -w
+
+use strict;
+use Getopt::Long;
+use File::Basename;
+use Data::Dumper;
+use 5.010;
+
+use Tuning::Util;
+use Tuning::Sched;
+
+my $HOME = $ENV{'HOME'};
+my $PATH = $HOME;	#repo's location
+
+my $VERBOSE;
+my $DEBUG;
+my $APPLY;
+my $TYPE;
+my $BUILD;
+my $CONFIG;
+my $VERSION;
+my $IMPORT;
+
+my %CONFIG;
+my $TOOLS;
+
+my $PROG = basename $0;
+
+sub usage {
+	say "usage:";
+	say "  $PROG [--debug|d] [--verbose|v] [--help|h|?]";
+	say "    --debug|d";
+	say "     debug mode, not real executive";
+	say "    --verbose|v";
+	say "     show more info";
+	say "    --help|h|?";
+	say "     show this usage";
+	exit 0;
+}
+
+usage() unless (@ARGV);
+my $result = GetOptions(
+	'apply|a!'	=>	\$APPLY,
+	'config|c!'	=>	\$CONFIG,
+	'debug|d!'	=>	\&debug(0),
+	'verbose|v!'	=>	\&verbose(1),
+	'help|h|?'	=>	\&usage,
+) or usage();
+
+# 检测系统状态
+# 1. 最忙的CPU：检测系统最忙的CPU，如果都忙， 则返回超过 60% 的CPU？
+# 2. 最忙的线程：进程和线程的状态，返回CPU占有率最高的几个线程、进程
+# 3. 时延：时延最大的CPU（测试套测时延）
+# 4. 时延：时延最大的线程（唤醒到运行的时间）
+# 5. 哪些CPU 是offline的，提示一下
+# 6. 哪些CPU 是isolation的，提示一下 
+sub cpuinfo {
+	system "lscpu";
+}
+
+# show_cpus("possile");
+sub show_cpus {
+	my $prefix = shift;
+	my $cpus = system_cpus_str($prefix);
+
+	print "$prefix cpus: $cpus\n";
+}
+
+# sub show_cpus {
+# 	my ($prefix, $cpus) = @_;
+# 
+# 	print "$prefix cpus:";
+# 	map {print "$_ "} @$cpus;
+# }
+
+sub cpu_status {
+	show_cpus("possible");
+	show_cpus("present");
+	show_cpus("online");
+	show_cpus("isolated");
+}
+
+sub sched_latency_header {
+	say " ----------------------------------------------------------------------------------------------------------------- ";   
+	say "  Task                  |   Runtime ms  | Switches | Average delay ms | Maximum delay ms | Maximum delay at       |";
+	say " ----------------------------------------------------------------------------------------------------------------- ";
+}
+
+sub sched_latency {
+	my $time = shift;
+	say "请耐心等待$time秒， 真正抓取时延数据。。。" if (verbose());
+	cmd "perf sched record sleep $time";
+
+	say "平均时延最长的10个线程" if(verbose());
+	sched_latency_header;
+	cmd "perf sched latency |sed '1,4d' |sed '/---------/d'|sed '/TOTAL:/d' |sed '/^\$/d' |sort -nrk 9|head";
+
+	say "最大时延最长的10个线程" if(verbose());
+	sched_latency_header;
+	cmd "perf sched latency |sed '1,4d' |sed '/---------/d'|sed '/TOTAL:/d' |sed '/^\$/d' |sort -nrk 13|head";
+
+	say "进程切换次数最多的10个线程" if(verbose());
+	sched_latency_header;
+	cmd "perf sched latency |sed '1,4d' |sed '/---------/d'|sed '/TOTAL:/d' |sed '/^\$/d' |sort -nrk 6|head";
+}
+
+sub sched_show_domain_flags {
+	my $s = Tuning::Sched->new();
+	$s->sched_domain_flags(1);
+}
+
+sub main()
+{
+	cpuinfo();
+	cpu_status();
+
+	sched_latency(5);
+	sched_show_domain_flags();
+}
+
+main;

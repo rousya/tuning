@@ -10,7 +10,7 @@ use base qw(Exporter);
 			   online_cpus isolcpus present_cpus prossible_cpus
 			   system_cpus system_cpus_str);
 
-my $DEBUG = 0;
+my $DEBUG = 1;
 my $VERBOSE = 0;
 
 sub debug {
@@ -156,10 +156,13 @@ sub cpus2list {
 			$res .= defined($res) ? ",$p" : "$p";
 			$p = $q = $_;
 		} else {
-			$res .= defined($res) ? ",$p-$q" : "$q-$q";
+			$res .= defined($res) ? ",$p-$q" : "$p-$q";
 			$p = $q = $_;
 		}
 	}
+
+	$res .= defined($res) ? ",$p" : "$p" if ($p == $q);
+	$res .= defined($res) ? ",$p-$q" : "$p-$q" if ($p != $q);
 
 	return $res;
 }

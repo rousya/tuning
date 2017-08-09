@@ -20,15 +20,23 @@ my $BUILD;
 my $CONFIG;
 my $VERSION;
 my $IMPORT;
+my $FLAMEGRAPH;
+my $COMMAND = "sleep 5";	# used by flamegraph
 
 my %CONFIG;
-my $TOOLS;
+my $TOOLS="/usr/local/share/tuning/tools";
 
 my $PROG = basename $0;
+my $PROG_DIR = `readlink -f $0|xargs dirname`; chomp $PROG_DIR;
+my $FLAMEGRAPH_DIR = "$TOOLS/FlameGraph";
 
 sub usage {
 	say "usage:";
 	say "  $PROG [--debug|d] [--verbose|v] [--help|h|?]";
+	say "    --cmd=CMD";
+	say "     create a flamegraph for CMD";
+	say "    --flamegraph|f";
+	say "     create a flamegraph for CMD";
 	say "    --debug|d";
 	say "     debug mode, not real executive";
 	say "    --verbose|v";
@@ -43,6 +51,8 @@ my $result = GetOptions(
 	'apply|a!'	=>	\$APPLY,
 	'config|c!'	=>	\$CONFIG,
 	'debug|d!'	=>	\&debug(0),
+	'cmd=s'		=>	\$COMMAND,
+	'flamegraph|f!'	=>	\$FLAMEGRAPH,
 	'verbose|v!'	=>	\&verbose(1),
 	'help|h|?'	=>	\&usage,
 ) or usage();
@@ -109,13 +119,32 @@ sub sched_show_domain_flags {
 	$s->sched_domain_flags(1);
 }
 
+# 生成火焰图
+sub perf_flamegraph {
+	my $cmd = shift;
+	my $cmd_s = $cmd;
+	$cmd_s =~ s/\s+/-/g;
+	$cmd_s =~ s/["']/-/g;
+
+	cmd "perf record -g -v $cmd";
+	cmd "mv perf.data $FLAMEGRAPH_DIR";
+	cd $FLAMEGRAPH_DIR;
+
+	cmd "pwd";
+	cmd "perf script | ./stackcollapse-perf.pl > out.perf-folded";
+	cmd "cat out.perf-folded | ./flamegraph.pl --title $cmd_s > perf-$cmd_s-flamegraph.svg";
+}
+
+
 sub main()
 {
-	cpuinfo();
-	cpu_status();
+ 	cpuinfo();
+ 	cpu_status();
+ 
+ 	sched_latency(5);
+ 	sched_show_domain_flags();
 
-	sched_latency(5);
-	sched_show_domain_flags();
+	perf_flamegraph("$COMMAND") if ($FLAMEGRAPH);
 }
 
 main;
